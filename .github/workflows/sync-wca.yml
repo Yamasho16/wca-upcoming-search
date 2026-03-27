@@ -26,6 +26,33 @@ jobs:
         run: |
           set -euo pipefail
 
+          request_with_retry() {
+            local url="$1"
+            local attempts=4
+            local delay=5
+            local try=1
+
+            while true; do
+              if response="$(curl --silent --show-error --fail-with-body \
+                -X POST \
+                -H "x-sync-secret: ${SYNC_API_SECRET}" \
+                "$url")"; then
+                printf '%s' "$response"
+                return 0
+              fi
+
+              if [ "$try" -ge "$attempts" ]; then
+                echo "Request failed after ${attempts} attempts: ${url}" >&2
+                return 1
+              fi
+
+              echo "Request failed for ${url}. Retrying in ${delay}s... (${try}/${attempts})" >&2
+              sleep "$delay"
+              try=$((try + 1))
+              delay=$((delay * 2))
+            done
+          }
+
           page=1
           pages_processed=0
           last_page=1
@@ -33,11 +60,7 @@ jobs:
           while true; do
             echo "Syncing page ${page}"
 
-            response="$(curl --silent --show-error --fail-with-body \
-              -X POST \
-              -H "x-sync-secret: ${SYNC_API_SECRET}" \
-              "${SYNC_BASE_URL}/api/admin/sync?page=${page}")"
-
+            response="$(request_with_retry "${SYNC_BASE_URL}/api/admin/sync?page=${page}")"
             echo "$response"
 
             has_next="$(printf '%s' "$response" | python -c "import sys, json; print(str(json.load(sys.stdin).get('hasNextPage', False)).lower())")"
@@ -64,7 +87,4 @@ jobs:
           done
 
           echo "Finalizing with page ${last_page}"
-          curl --silent --show-error --fail-with-body \
-            -X POST \
-            -H "x-sync-secret: ${SYNC_API_SECRET}" \
-            "${SYNC_BASE_URL}/api/admin/sync?page=${last_page}&finalize=1"
+          request_with_retry "${SYNC_BASE_URL}/api/admin/sync?page=${last_page}&finalize=1"

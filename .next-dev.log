@@ -1,0 +1,18 @@
+
+> wca-upcoming-search@0.1.0 dev
+> next dev
+
+▲ Next.js 16.2.1 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://192.168.0.10:3000
+- Environments: .env.local
+✓ Ready in 1937ms
+Creating turbopack project { dir: 'C:\\Users\\orage\\Documents\\20260328', testMode: true }
+
+ GET / 200 in 1285ms (next.js: 638ms, application-code: 647ms)
+ GET /api/competitions 200 in 3.0s (next.js: 1790ms, application-code: 1175ms)
+ GET / 200 in 246ms (next.js: 22ms, application-code: 224ms)
+ GET /api/competitions 200 in 844ms (next.js: 11ms, application-code: 833ms)
+ GET /api/competitions?location=Asia&eventId=333bf&roundsGte=3 200 in 665ms (next.js: 12ms, application-code: 653ms)
+ GET / 200 in 152ms (next.js: 22ms, application-code: 129ms)
+ GET /api/competitions 200 in 530ms (next.js: 11ms, application-code: 519ms)

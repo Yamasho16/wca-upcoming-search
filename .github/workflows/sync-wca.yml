@@ -1,0 +1,70 @@
+name: Sync WCA Competitions
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 18 * * *"
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      SYNC_BASE_URL: ${{ secrets.SYNC_BASE_URL }}
+      SYNC_API_SECRET: ${{ secrets.SYNC_API_SECRET }}
+      MAX_PAGES: "80"
+    steps:
+      - name: Validate required secrets
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -n "${SYNC_BASE_URL}"
+          test -n "${SYNC_API_SECRET}"
+
+      - name: Sync paginated upcoming competitions
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          page=1
+          pages_processed=0
+          last_page=1
+
+          while true; do
+            echo "Syncing page ${page}"
+
+            response="$(curl --silent --show-error --fail-with-body \
+              -X POST \
+              -H "x-sync-secret: ${SYNC_API_SECRET}" \
+              "${SYNC_BASE_URL}/api/admin/sync?page=${page}")"
+
+            echo "$response"
+
+            has_next="$(printf '%s' "$response" | python -c "import sys, json; print(str(json.load(sys.stdin).get('hasNextPage', False)).lower())")"
+            next_page="$(printf '%s' "$response" | python -c "import sys, json; print(json.load(sys.stdin).get('nextPage') or '')")"
+
+            pages_processed=$((pages_processed + 1))
+            last_page="${page}"
+
+            if [ "$has_next" != "true" ]; then
+              break
+            fi
+
+            if [ "$pages_processed" -ge "$MAX_PAGES" ]; then
+              echo "Reached MAX_PAGES=${MAX_PAGES} before completion" >&2
+              exit 1
+            fi
+
+            if [ -z "$next_page" ]; then
+              echo "hasNextPage=true but nextPage missing" >&2
+              exit 1
+            fi
+
+            page="$next_page"
+          done
+
+          echo "Finalizing with page ${last_page}"
+          curl --silent --show-error --fail-with-body \
+            -X POST \
+            -H "x-sync-secret: ${SYNC_API_SECRET}" \
+            "${SYNC_BASE_URL}/api/admin/sync?page=${last_page}&finalize=1"

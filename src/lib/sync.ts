@@ -9,6 +9,10 @@ import {
 } from "@/lib/wca";
 import type { SyncCompetitionResult, SyncSummary } from "@/types/competition";
 
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 async function runInBatches<T>(
   items: T[],
   batchSize: number,
@@ -17,7 +21,42 @@ async function runInBatches<T>(
   for (let index = 0; index < items.length; index += batchSize) {
     const chunk = items.slice(index, index + batchSize);
     await Promise.allSettled(chunk.map((item) => handler(item)));
+
+    if (index + batchSize < items.length && env.syncBatchDelayMs > 0) {
+      await sleep(env.syncBatchDelayMs);
+    }
   }
+}
+
+async function syncSingleCompetitionWithRetry(
+  competitionId: string,
+  handler: () => Promise<void>,
+): Promise<SyncCompetitionResult> {
+  const attempts = Math.max(1, env.syncCompetitionRetryCount + 1);
+  let lastMessage = "Unknown sync error";
+
+  for (let attempt = 1; attempt <= attempts; attempt += 1) {
+    try {
+      await handler();
+
+      return {
+        competitionId,
+        status: "synced",
+      };
+    } catch (error) {
+      lastMessage = error instanceof Error ? error.message : "Unknown sync error";
+
+      if (attempt < attempts) {
+        await sleep(attempt * 1500);
+      }
+    }
+  }
+
+  return {
+    competitionId,
+    status: "failed",
+    message: lastMessage,
+  };
 }
 
 type SyncOptions = {
@@ -36,23 +75,13 @@ export async function syncUpcomingCompetitions(
   const results: SyncCompetitionResult[] = [];
 
   await runInBatches(summaries, Math.max(1, env.syncConcurrency), async (summary) => {
-    try {
+    const result = await syncSingleCompetitionWithRetry(summary.id, async () => {
       const wcif = await fetchCompetitionPublicWcif(summary.id);
       const document = buildCompetitionDocumentFromWca(summary, wcif, new Date().toISOString());
       await upsertCompetition(document);
-      results.push({
-        competitionId: summary.id,
-        status: "synced",
-      });
-    } catch (error) {
-      const message = error instanceof Error ? error.message : "Unknown sync error";
+    });
 
-      results.push({
-        competitionId: summary.id,
-        status: "failed",
-        message,
-      });
-    }
+    results.push(result);
   });
 
   const hasNextPage = summaries.length === 25;

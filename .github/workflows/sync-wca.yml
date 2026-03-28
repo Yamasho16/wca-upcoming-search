@@ -13,7 +13,7 @@ jobs:
       SYNC_BASE_URL: ${{ secrets.SYNC_BASE_URL }}
       SYNC_API_SECRET: ${{ secrets.SYNC_API_SECRET }}
       MAX_PAGES: "80"
-      CHUNK_SIZE: "5"
+      CHUNK_SIZE: "3"
     steps:
       - name: Validate required secrets
         shell: bash

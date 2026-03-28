@@ -13,6 +13,7 @@ jobs:
       SYNC_BASE_URL: ${{ secrets.SYNC_BASE_URL }}
       SYNC_API_SECRET: ${{ secrets.SYNC_API_SECRET }}
       MAX_PAGES: "80"
+      CHUNK_SIZE: "5"
     steps:
       - name: Validate required secrets
         shell: bash
@@ -54,20 +55,34 @@ jobs:
           }
 
           page=1
+          offset=0
           pages_processed=0
           last_page=1
+          last_offset=0
 
           while true; do
-            echo "Syncing page ${page}"
+            echo "Syncing page ${page} offset ${offset}"
 
-            response="$(request_with_retry "${SYNC_BASE_URL}/api/admin/sync?page=${page}")"
+            response="$(request_with_retry "${SYNC_BASE_URL}/api/admin/sync?page=${page}&offset=${offset}&chunkSize=${CHUNK_SIZE}")"
             echo "$response"
 
+            has_next_chunk="$(printf '%s' "$response" | python -c "import sys, json; print(str(json.load(sys.stdin).get('hasNextChunk', False)).lower())")"
+            next_offset="$(printf '%s' "$response" | python -c "import sys, json; print(json.load(sys.stdin).get('nextOffset') or '')")"
             has_next="$(printf '%s' "$response" | python -c "import sys, json; print(str(json.load(sys.stdin).get('hasNextPage', False)).lower())")"
             next_page="$(printf '%s' "$response" | python -c "import sys, json; print(json.load(sys.stdin).get('nextPage') or '')")"
 
             pages_processed=$((pages_processed + 1))
             last_page="${page}"
+            last_offset="${offset}"
+
+            if [ "$has_next_chunk" = "true" ]; then
+              if [ -z "$next_offset" ]; then
+                echo "hasNextChunk=true but nextOffset missing" >&2
+                exit 1
+              fi
+              offset="$next_offset"
+              continue
+            fi
 
             if [ "$has_next" != "true" ]; then
               break
@@ -84,7 +99,8 @@ jobs:
             fi
 
             page="$next_page"
+            offset=0
           done
 
-          echo "Finalizing with page ${last_page}"
-          request_with_retry "${SYNC_BASE_URL}/api/admin/sync?page=${last_page}&finalize=1"
+          echo "Finalizing after page ${last_page}"
+          request_with_retry "${SYNC_BASE_URL}/api/admin/sync?page=${last_page}&offset=${last_offset}&chunkSize=${CHUNK_SIZE}&finalize=1&finalizeOnly=1"

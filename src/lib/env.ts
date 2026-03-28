@@ -7,6 +7,7 @@ export const env = {
   syncConcurrency: Number(getEnv("SYNC_CONCURRENCY") || "2"),
   syncBatchDelayMs: Number(getEnv("SYNC_BATCH_DELAY_MS") || "750"),
   syncCompetitionRetryCount: Number(getEnv("SYNC_COMPETITION_RETRY_COUNT") || "2"),
+  syncChunkSize: Number(getEnv("SYNC_CHUNK_SIZE") || "5"),
 };
 
 export function getRequiredEnv(name: string): string {

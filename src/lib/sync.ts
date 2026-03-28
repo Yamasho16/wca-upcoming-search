@@ -61,17 +61,24 @@ async function syncSingleCompetitionWithRetry(
 
 type SyncOptions = {
   page?: number;
+  offset?: number;
+  chunkSize?: number;
   finalize?: boolean;
+  finalizeOnly?: boolean;
 };
 
 export async function syncUpcomingCompetitions(
   options: SyncOptions = {},
 ): Promise<SyncSummary> {
   const page = Math.max(1, options.page || 1);
+  const offset = Math.max(0, options.offset || 0);
+  const chunkSize = Math.max(1, options.chunkSize || env.syncChunkSize);
   const finalize = options.finalize ?? false;
+  const finalizeOnly = options.finalizeOnly ?? false;
   const startDate = todayIsoDate();
   const startedAt = new Date().toISOString();
-  const summaries = await fetchUpcomingCompetitionSummariesPage(startDate, page);
+  const pageSummaries = await fetchUpcomingCompetitionSummariesPage(startDate, page);
+  const summaries = finalizeOnly ? [] : pageSummaries.slice(offset, offset + chunkSize);
   const results: SyncCompetitionResult[] = [];
 
   await runInBatches(summaries, Math.max(1, env.syncConcurrency), async (summary) => {
@@ -84,7 +91,9 @@ export async function syncUpcomingCompetitions(
     results.push(result);
   });
 
-  const hasNextPage = summaries.length === 25;
+  const hasNextChunk = !finalizeOnly && offset + chunkSize < pageSummaries.length;
+  const nextOffset = hasNextChunk ? offset + chunkSize : null;
+  const hasNextPage = !hasNextChunk && pageSummaries.length === 25;
   const nextPage = hasNextPage ? page + 1 : null;
   let deactivatedCompetitionCount = 0;
 
@@ -105,10 +114,14 @@ export async function syncUpcomingCompetitions(
     startedAt,
     finishedAt: new Date().toISOString(),
     page,
+    offset,
+    chunkSize,
     fetchedCompetitionCount: summaries.length,
     syncedCompetitionCount,
     failedCompetitionCount,
     deactivatedCompetitionCount,
+    hasNextChunk,
+    nextOffset,
     hasNextPage,
     nextPage,
     finalized: finalize,

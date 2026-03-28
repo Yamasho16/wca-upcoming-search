@@ -65,10 +65,14 @@ export type SyncSummary = {
   startedAt: string;
   finishedAt: string;
   page: number;
+  offset: number;
+  chunkSize: number;
   fetchedCompetitionCount: number;
   syncedCompetitionCount: number;
   failedCompetitionCount: number;
   deactivatedCompetitionCount: number;
+  hasNextChunk: boolean;
+  nextOffset: number | null;
   hasNextPage: boolean;
   nextPage: number | null;
   finalized: boolean;

@@ -24,16 +24,32 @@ async function handleSync(request: NextRequest) {
     }
 
     const pageRaw = request.nextUrl.searchParams.get("page");
+    const offsetRaw = request.nextUrl.searchParams.get("offset");
+    const chunkSizeRaw = request.nextUrl.searchParams.get("chunkSize");
     const finalizeRaw = request.nextUrl.searchParams.get("finalize");
+    const finalizeOnlyRaw = request.nextUrl.searchParams.get("finalizeOnly");
     const page = pageRaw ? Number(pageRaw) : 1;
+    const offset = offsetRaw ? Number(offsetRaw) : 0;
+    const chunkSize = chunkSizeRaw ? Number(chunkSizeRaw) : undefined;
 
     if (!Number.isInteger(page) || page < 1) {
       return NextResponse.json({ error: "page must be an integer >= 1." }, { status: 400 });
     }
 
+    if (!Number.isInteger(offset) || offset < 0) {
+      return NextResponse.json({ error: "offset must be an integer >= 0." }, { status: 400 });
+    }
+
+    if (typeof chunkSize === "number" && (!Number.isInteger(chunkSize) || chunkSize < 1)) {
+      return NextResponse.json({ error: "chunkSize must be an integer >= 1." }, { status: 400 });
+    }
+
     const summary = await syncUpcomingCompetitions({
       page,
+      offset,
+      chunkSize,
       finalize: finalizeRaw === "1" || finalizeRaw === "true",
+      finalizeOnly: finalizeOnlyRaw === "1" || finalizeOnlyRaw === "true",
     });
 
     return NextResponse.json(summary, { status: 200 });
